@@ -1,0 +1,57 @@
+<div class="container-xl py-10">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-3xl font-bold text-white">Anti-Forensics Detector</h1>
+    <button class="btn btn-primary" disabled>
+      <svg viewBox="0 0 24 24" class="h-5 w-5" aria-hidden="true"><path fill="currentColor" d="M6 2h9a2 2 0 012 2v3h1a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm9 5V4H6v16h12V9h-3zm-7 8h8v2H8v-2zm0-4h8v2H8v-2z"/></svg>
+      Generate Report
+    </button>
+  </div>
+
+  <div class="card p-6 mb-6">
+    <h2 class="text-xl font-semibold text-white mb-4">Analyze for Anti-Forensics Techniques</h2>
+    <div class="mb-4">
+      <label for="filePath" class="block text-gray-300 text-sm font-semibold mb-2">File/Directory Path</label>
+      <input type="text" id="filePath" [(ngModel)]="analysisPath" class="bg-transparent border border-gray-700 rounded w-full py-2 px-3 text-gray-200 placeholder-gray-500 focus:outline-none" placeholder="C:\\evidence\\malware.exe or /var/log">
+    </div>
+    <div class="mb-4">
+      <label for="analysisOptions" class="block text-gray-300 text-sm font-semibold mb-2">Analysis Options</label>
+      <select id="analysisOptions" [(ngModel)]="selectedOption" class="bg-transparent border border-gray-700 rounded w-full py-2 px-3 text-gray-200 focus:outline-none">
+        <option value="full">Full Scan</option>
+        <option value="quick">Quick Scan</option>
+        <option value="custom">Custom Scan</option>
+      </select>
+    </div>
+    <button (click)="runAnalysis()" class="btn btn-secondary">
+      <svg viewBox="0 0 24 24" class="h-5 w-5" aria-hidden="true"><path fill="currentColor" d="M12 2l9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4z"/></svg>
+      Run Analysis
+    </button>
+  </div>
+
+  <div *ngIf="analysisResults.length > 0" class="card p-6">
+    <h2 class="text-xl font-semibold text-white mb-4">Analysis Results</h2>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div *ngFor="let result of analysisResults" class="glass p-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="badge" [ngClass]="{
+              'bg-red-500/20 text-red-300': result.severity === 'High',
+              'bg-yellow-500/20 text-yellow-300': result.severity === 'Medium',
+              'bg-green-500/20 text-green-300': result.severity === 'Low'
+            }">{{ result.severity }}</span>
+            <span class="text-white font-semibold">{{ result.indicator }}</span>
+          </div>
+          <span class="text-sm text-gray-400">Confidence: {{ (result.confidence * 100) | number:'1.0-0' }}%</span>
+        </div>
+        <p class="mt-2 text-sm text-gray-300">{{ result.description }}</p>
+        <div class="mt-3 text-xs text-gray-400">{{ result.details }}</div>
+        <div class="mt-3 h-2 w-full rounded bg-gray-800">
+          <div class="h-2 rounded" [ngClass]="{
+            'bg-red-500': result.severity === 'High',
+            'bg-yellow-500': result.severity === 'Medium',
+            'bg-green-500': result.severity === 'Low'
+          }" [style.width.%]="result.confidence * 100"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

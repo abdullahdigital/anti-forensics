@@ -1,0 +1,6 @@
+# backend/python/requirements.txt
+flask
+flask-cors
+python-dotenv
+# Add forensic and AI libraries here as needed
+# e.g., scikit-learn, pandas, volatility3, python-forensics

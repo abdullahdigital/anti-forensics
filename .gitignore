@@ -1,0 +1,7 @@
+# Gitignore for Node.js (Express) and Python (venv)
+
+# Node.js
+node_modules/
+
+# Python
+venv/
