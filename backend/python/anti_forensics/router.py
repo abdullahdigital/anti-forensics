@@ -1,49 +1,152 @@
-from anti_forensics.anomaly_scorer import score_anomalies
-from anti_forensics.fake_metadata import detect_fake_metadata
-from anti_forensics.hidden_file_finder import find_hidden_files
-from anti_forensics.stego_detector import detect_steganography
-from anti_forensics.timestomp_detector import detect_timestomping
-from anti_forensics.data_wiping_detector import detect_data_wiping_patterns, analyze_slack_space
-from anti_forensics.encryption_detector import detect_encrypted_file
-from anti_forensics.ads_detector import detect_ads
+import os
+import json
+from flask import Blueprint, request, jsonify
+from werkzeug.utils import secure_filename
+from .ads_detector import ADSDetector
 
-class AntiForensicsRouter:
-    def __init__(self):
-        pass
+ads_bp = Blueprint('ads', __name__)
 
-    def analyze_file(self, file_path):
-        results = {
-            "file_path": file_path,
-            "anomaly_score": score_anomalies(file_path), # Assuming score_anomalies takes file_path
-            "fake_metadata_detection": detect_fake_metadata(file_path), # Assuming detect_fake_metadata takes file_path
-            "hidden_files_found": find_hidden_files(file_path), # Assuming find_hidden_files takes file_path
-            "steganography_detection": detect_steganography(file_path), # Assuming detect_steganography takes file_path
-            "timestomping_detection": detect_timestomp_detector(file_path), # Assuming detect_timestomp_detector takes file_path
-            "data_wiping_detection": detect_data_wiping_patterns(file_path), # Assuming detect_data_wiping_patterns takes file_path
-            "encryption_detection": detect_encrypted_file(file_path), # Assuming detect_encrypted_file takes file_path
-            "ads_detection": detect_ads(file_path) # Assuming detect_ads takes file_path
-        }
-        return results
+# Initialize detector
+ads_detector = ADSDetector()
 
-    # You can add more specific methods here if needed, e.g.,
-    # def get_stego_report(self, file_path):
-    #     return detect_steganography(file_path)
+# Allowed file extensions
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'png', 'exe', 'zip'}
 
-# Example usage (for testing the router)
-if __name__ == '__main__':
-    router = AntiForensicsRouter()
-    # Create a dummy file for testing
-    dummy_test_file = "d:\Air University\Semester 5\DF Lab\project\project\backend\python\anti_forensics\test_file.txt"
-    with open(dummy_test_file, 'w') as f:
-        f.write("This is a test file for anti-forensics analysis.")
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-    print(f"Analyzing {dummy_test_file} using the AntiForensicsRouter:")
-    analysis_results = router.analyze_file(dummy_test_file)
-    print(analysis_results)
+@ads_bp.route("/detect", methods=["POST", "OPTIONS"])
+def detect_ads_endpoint():
+    """
+    Detect Alternate Data Streams in a file or directory
+    """
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({"success": False, "detail": "No JSON data provided"}), 400
+    
+    file_path = data.get("file_path")
+    use_win32api = data.get("use_win32api", True)
+    scan_directory = data.get("scan_directory", False)
+    selected_detectors = data.get("selected_detectors", [])
 
-    # Clean up dummy file
-    os.remove(dummy_test_file)
+    if not file_path:
+        return jsonify({"success": False, "detail": "File path is required"}), 400
 
-    # Note: For a complete test, you would need to create files that trigger
-    # each of the detection mechanisms (e.g., a file with fake metadata, a stego image, etc.)
-    # and ensure the individual functions are working correctly.
+    try:
+        # Re-initialize detector with potentially updated use_win32api setting
+        detector = ADSDetector(use_win32api=use_win32api)
+        results = detector.detect_ads_comprehensive(file_path, selected_detectors)
+
+        if "error" in results:
+            return jsonify({"success": False, "detail": results["error"]}), 404
+
+        return jsonify({
+            "success": True,
+            "data": results,
+            "message": "ADS detection completed"
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "detail": str(e)}), 500
+
+@ads_bp.route("/upload-and-detect", methods=["POST", "OPTIONS"])
+def upload_and_detect():
+    """
+    Upload a file and detect ADS
+    """
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    
+    if 'file' not in request.files:
+        return jsonify({"success": False, "detail": "No file part in the request"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "detail": "No selected file"}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"success": False, "detail": f"File type not allowed. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"}), 400
+
+    detectors_json = request.form.get('detectors', '[]')
+    try:
+        selected_detectors = json.loads(detectors_json)
+    except json.JSONDecodeError:
+        selected_detectors = []
+
+    try:
+        # Create temp directory
+        temp_dir = "./temp_uploads"
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Secure the filename
+        filename = secure_filename(file.filename)
+        temp_path = os.path.join(temp_dir, filename)
+        
+        # Save uploaded file
+        file.save(temp_path)
+
+        # Detect ADS
+        results = ads_detector.detect_ads_comprehensive(temp_path, selected_detectors)
+
+        # Clean up temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        
+        # Clean up temp directory if empty
+        if os.path.exists(temp_dir) and not os.listdir(temp_dir):
+            os.rmdir(temp_dir)
+
+        return jsonify({
+            "success": True,
+            "data": results,
+            "filename": filename,
+            "selected_detectors": selected_detectors
+        })
+
+    except Exception as e:
+        # Clean up on error
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.remove(temp_path)
+        return jsonify({"success": False, "detail": str(e)}), 500
+
+@ads_bp.route("/test/create", methods=["GET"])
+def create_test_ads():
+    """
+    Create a test file with ADS for demonstration
+    """
+    from .ads_detector import create_test_ads_file
+
+    success, message = create_test_ads_file("test_ads_demo.txt")
+
+    if success:
+        return jsonify({
+            "success": True,
+            "message": message,
+            "test_file": "test_ads_demo.txt"
+        })
+    else:
+        return jsonify({"success": False, "detail": message}), 500
+
+@ads_bp.route("/stats", methods=["GET"])
+def get_ads_statistics():
+    """
+    Get statistics about ADS in a directory
+    """
+    directory = request.args.get("directory")
+    if not directory:
+        return jsonify({"success": False, "detail": "Directory parameter is required"}), 400
+
+    try:
+        detector = ADSDetector()
+        results = detector.scan_directory_for_ads(directory)
+        return jsonify({"success": True, "data": results})
+    except Exception as e:
+        return jsonify({"success": False, "detail": str(e)}), 500
+
+# Health check endpoint
+@ads_bp.route("/health", methods=["GET"])
+def health_check():
+    return jsonify({"status": "healthy", "service": "ADS Detector API"})

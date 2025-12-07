@@ -8,11 +8,11 @@ import { ReportGeneratorComponent } from './pages/report-generator/report-genera
 
 export const routes: Routes = [
   { path: '', redirectTo: '/home', pathMatch: 'full' },
-  { path: 'home', component: HomeComponent },
-  { path: 'dashboard', component: DashboardComponent },
-  { path: 'evidence-upload', component: EvidenceUploadComponent },
-  { path: 'filesystem-visualizer', component: FilesystemVisualizerComponent },
-  { path: 'anti-forensics-detector', component: AntiForensicsDetectorComponent },
-  { path: 'report-generator', component: ReportGeneratorComponent },
-  { path: '**', redirectTo: '/home' } // Wildcard route for a 404 page
+  { path: 'home', component: HomeComponent, title: 'Home' },
+  { path: 'dashboard', component: DashboardComponent, title: 'Dashboard' },
+  { path: 'evidence-upload', component: EvidenceUploadComponent, title: 'Evidence Upload' },
+  { path: 'filesystem-visualizer', component: FilesystemVisualizerComponent, title: 'Filesystem Visualizer' },
+  { path: 'anti-forensics-detector', component: AntiForensicsDetectorComponent, title: 'Anti-Forensics Detector' },
+  { path: 'report-generator', component: ReportGeneratorComponent, title: 'Report Generator' },
+  { path: '**', redirectTo: '/home', title: 'Page Not Found' } // Wildcard route for a 404 page
 ];

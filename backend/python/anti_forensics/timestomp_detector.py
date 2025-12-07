@@ -4,135 +4,129 @@ import datetime
 def get_file_timestamps(file_path):
     """
     Retrieves the creation, modification, and access timestamps of a file.
-    
+
     Args:
         file_path (str): The path to the file.
-        
+
     Returns:
-        dict: A dictionary containing 'creation_time', 'modification_time', 'access_time'
+        dict: A dictionary containing 'creation_time', 'modification_time', and 'access_time'
               as datetime objects, or None if the file does not exist.
     """
     if not os.path.exists(file_path):
         return None
 
-    stat_info = os.stat(file_path)
-    
-    # st_ctime: creation time (on Windows), last metadata change time (on Unix)
-    # st_mtime: last modification time
-    # st_atime: last access time
-    
-    return {
-        "creation_time": datetime.datetime.fromtimestamp(stat_info.st_ctime),
-        "modification_time": datetime.datetime.fromtimestamp(stat_info.st_mtime),
-        "access_time": datetime.datetime.fromtimestamp(stat_info.st_atime)
-    }
+    try:
+        # On Windows, ctime is creation time. On Unix, it's last metadata change time.
+        # For cross-platform consistency, we'll note this.
+        creation_timestamp = os.path.getctime(file_path)
+        modification_timestamp = os.path.getmtime(file_path)
+        access_timestamp = os.path.getatime(file_path)
+
+        return {
+            "creation_time": datetime.datetime.fromtimestamp(creation_timestamp),
+            "modification_time": datetime.datetime.fromtimestamp(modification_timestamp),
+            "access_time": datetime.datetime.fromtimestamp(access_timestamp)
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 def detect_timestomping(file_path):
     """
-    Detects potential timestomping by analyzing file timestamps.
-    
+    Detects potential timestomping by analyzing inconsistencies in file timestamps.
+
     Args:
         file_path (str): The path to the file to analyze.
-        
+
     Returns:
-        dict: A dictionary indicating if timestomping is suspected and the reasons.
+        dict: A dictionary indicating if timestomping is suspected, reasons, and the timestamps.
     """
     timestamps = get_file_timestamps(file_path)
 
     if timestamps is None:
-        return {"file_path": file_path, "is_timestomped": False, "reason": "File not found"}
+        return {"error": "File not found", "file_path": file_path}
+    if "error" in timestamps:
+        return {"error": timestamps["error"], "file_path": file_path}
+
+    is_timestomped = False
+    reasons = []
 
     c_time = timestamps["creation_time"]
     m_time = timestamps["modification_time"]
     a_time = timestamps["access_time"]
 
-    suspicions = []
-
-    # Rule 1: Modification time is earlier than creation time
-    # This is often a strong indicator of timestomping, though can occur with some file transfers.
+    # Common timestomping indicators:
+    # 1. Modification time is earlier than creation time (impossible normally)
     if m_time < c_time:
-        suspicions.append(f"Modification time ({m_time}) is earlier than creation time ({c_time}).")
+        is_timestomped = True
+        reasons.append(f"Modification time ({m_time}) is earlier than creation time ({c_time}).")
 
-    # Rule 2: Access time is significantly older than modification/creation time
-    # This could indicate an attempt to hide recent activity.
-    # Define a threshold, e.g., 30 days difference
-    time_difference_threshold = datetime.timedelta(days=30)
-    if (c_time - a_time) > time_difference_threshold or \
-       (m_time - a_time) > time_difference_threshold:
-        suspicions.append(f"Access time ({a_time}) is significantly older than creation ({c_time}) or modification ({m_time}) time.")
+    # 2. Access time is significantly older than modification/creation time (might indicate tampering or unusual access patterns)
+    #    This is more heuristic and depends on system usage, so we'll make it a weak indicator.
+    #    A significant difference could be, for example, more than a year.
+    #    However, for a more robust detection, this would need context.
+    # if (c_time - a_time).days > 365 or (m_time - a_time).days > 365:
+    #     is_timestomped = True
+    #     reasons.append(f"Access time ({a_time}) is significantly older than creation/modification time.")
 
-    # Rule 3: All timestamps are identical and very recent for an old file type/location
-    # This is harder to detect without context, but can be suspicious.
-    # For now, we'll just check if all are identical.
-    if c_time == m_time and m_time == a_time:
-        suspicions.append(f"All timestamps (creation, modification, access) are identical ({c_time}). This can be suspicious if the file content suggests otherwise.")
-
-    # Rule 4: Creation time is in the future (highly suspicious)
-    if c_time > datetime.datetime.now():
-        suspicions.append(f"Creation time ({c_time}) is in the future.")
-
-    # Rule 5: Modification time is in the future (highly suspicious)
-    if m_time > datetime.datetime.now():
-        suspicions.append(f"Modification time ({m_time}) is in the future.")
-
-    is_timestomped = bool(suspicions)
+    # 3. All timestamps are identical (could be normal for new files, but suspicious for older files)
+    if c_time == m_time == a_time:
+        # This is often normal for newly created files that haven't been modified or accessed yet.
+        # It becomes suspicious if the file has been around for a while.
+        # For now, we'll flag it as a potential indicator if other anomalies are present.
+        if not is_timestomped: # Only add if no other strong indicators
+            reasons.append("All timestamps (creation, modification, access) are identical. This can be normal for new files, but might be suspicious for older files.")
 
     return {
         "file_path": file_path,
         "is_timestomped": is_timestomped,
-        "reasons": suspicions,
-        "timestamps": {k: str(v) for k, v in timestamps.items()} # Convert datetime to string for output
+        "reasons": reasons,
+        "timestamps": {
+            "creation_time": str(c_time),
+            "modification_time": str(m_time),
+            "access_time": str(a_time)
+        }
     }
 
 if __name__ == '__main__':
     # Example Usage
-    # Create a dummy file for testing
-    dummy_file_path = "d:\Air University\Semester 5\DF Lab\project\project\backend\python\anti_forensics\dummy_timestomp_test.txt"
-    with open(dummy_file_path, 'w') as f:
+    test_file = "d:\Air University\Semester 5\DF Lab\project\project\backend\python\anti_forensics\test_timestomp_file.txt"
+
+    # Create a dummy file
+    with open(test_file, 'w') as f:
         f.write("This is a test file for timestomping detection.")
-    
-    # Get initial timestamps
-    initial_timestamps = get_file_timestamps(dummy_file_path)
-    print(f"Initial timestamps: {initial_timestamps}")
 
-    # Simulate timestomping: change modification time to be earlier than creation time
-    # This requires specific OS-level calls or tools, os.utime can change mtime and atime
-    # To change ctime on Windows, you often need more advanced methods or external tools.
-    # For demonstration, we'll simulate a suspicious scenario.
-    
-    # Scenario 1: Modification time earlier than creation time
-    # (This is hard to achieve directly with os.utime for ctime on Windows)
-    # We'll manually create a scenario for testing the logic.
-    print("\n--- Testing Scenario 1: Modification time < Creation time ---")
-    # Manually create a scenario where m_time < c_time for testing purposes
-    # In a real scenario, this would be detected from actual file metadata.
-    test_timestamps = {
-        "creation_time": datetime.datetime(2023, 1, 1, 10, 0, 0),
-        "modification_time": datetime.datetime(2022, 12, 31, 9, 0, 0),
-        "access_time": datetime.datetime(2023, 1, 1, 10, 0, 0)
-    }
-    # Temporarily override get_file_timestamps for this test
-    original_get_file_timestamps = get_file_timestamps
-    def mock_get_file_timestamps(path):
-        if path == dummy_file_path:
-            return test_timestamps
-        return original_get_file_timestamps(path)
-    globals()['get_file_timestamps'] = mock_get_file_timestamps
+    print(f"Analyzing: {test_file}")
+    result = detect_timestomping(test_file)
+    print(result)
 
-    result1 = detect_timestomping(dummy_file_path)
-    print(result1)
-    globals()['get_file_timestamps'] = original_get_file_timestamps # Restore original
+    # Simulate timestomping (this requires external tools or specific OS calls)
+    # For demonstration, we'll manually set a modification time earlier than creation time
+    # Note: os.utime can set mtime and atime, but ctime is harder to change without admin/special tools.
+    # We'll simulate a scenario where mtime is older than ctime.
+    # This is a conceptual example, as directly setting ctime in Python is not straightforward.
 
-    # Scenario 2: All timestamps identical and recent (for an assumed old file)
-    print("\n--- Testing Scenario 2: All timestamps identical ---")
-    # Simulate setting all timestamps to current time
-    current_time = datetime.datetime.now()
-    os.utime(dummy_file_path, (current_time.timestamp(), current_time.timestamp()))
-    # For ctime, it's more complex. We'll rely on the os.stat().st_ctime for Windows.
-    # If on Unix, st_ctime is metadata change time, not creation time.
-    
-    result2 = detect_timestomping(dummy_file_path)
-    print(result2)
+    # Let's create a file, then change its modification time to be older than its creation time.
+    # This is often done with tools like 'touch -m -t' or specific APIs.
+    # For Python, we can only easily manipulate mtime and atime.
+    # To truly test the m_time < c_time scenario, you'd need to use a tool that can modify ctime.
 
-    # Clean up dummy file
-    os.remove(dummy_file_path)
+    # For now, let's just demonstrate a file with identical timestamps (which is a weak indicator)
+    # and a file that might have a suspicious access pattern.
+
+    # Clean up
+    if os.path.exists(test_file):
+        os.remove(test_file)
+
+    # Example of a file with a simulated timestomped modification time (conceptual)
+    # This part is hard to simulate purely in Python without external tools or specific OS APIs
+    # that allow setting ctime. The `os.utime` function only sets atime and mtime.
+    # For a real test, you would use a forensic tool or a system call that can modify ctime.
+
+    # Let's create a file and then try to make its mtime older than its ctime (conceptually).
+    # This will likely not work as intended on most systems without special privileges/tools.
+    # The primary detection `m_time < c_time` is the strongest indicator.
+
+    # Example of a non-existent file
+    print("\nChecking for timestomping on non_existent_file.txt")
+    result_non_existent = detect_timestomping("non_existent_file.txt")
+    print(result_non_existent)

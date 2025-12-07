@@ -1,94 +1,206 @@
 import os
-import re
 
-def detect_data_wiping_patterns(file_path, patterns=None):
+# Assuming file_utils.py is in the same directory and contains read_file_content
+from .file_utils import read_file_content, get_file_size
+
+def detect_zero_fill(file_path, chunk_size=4096, threshold=0.9):
     """
-    Detects common data wiping patterns in a given file.
-    
+    Detects if a significant portion of a file is filled with zeros.
+    This can indicate a basic data wiping attempt.
+
     Args:
         file_path (str): The path to the file to analyze.
-        patterns (list): A list of regex patterns to search for. If None, uses default patterns.
-                         Default patterns include common wiping signatures like '0x00', '0xFF', 'random data'.
-    
+        chunk_size (int): The size of chunks to read from the file.
+        threshold (float): The proportion of zero-filled chunks to consider it wiped.
+
     Returns:
-        dict: A dictionary indicating if wiping patterns were found and which ones.
+        dict: A dictionary indicating if zero-fill wiping is suspected and the proportion of zeros.
     """
     if not os.path.exists(file_path):
         return {"error": "File not found", "file_path": file_path}
 
-    if patterns is None:
-        # Common data wiping patterns (regex)
-        # 0x00 (null bytes), 0xFF (all ones), random data (high entropy)
-        # Note: High entropy detection is more complex and might require statistical analysis
-        # For simplicity, we'll look for repeated patterns of 0s or Fs.
-        patterns = [
-            rb'(\x00\x00\x00\x00){10,}',  # Sequence of 10 or more null bytes
-            rb'(\xff\xff\xff\xff){10,}',  # Sequence of 10 or more 0xFF bytes
-            # More advanced patterns could include specific tool signatures
-        ]
+    total_chunks = 0
+    zero_filled_chunks = 0
+    file_size = get_file_size(file_path)
 
-    found_patterns = []
-    try:
-        with open(file_path, 'rb') as f:
-            content = f.read()
-            for pattern in patterns:
-                if re.search(pattern, content):
-                    found_patterns.append(pattern.decode('latin-1', errors='ignore')) # Decode for display
-    except Exception as e:
-        return {"error": str(e), "file_path": file_path}
+    if file_size == 0:
+        return {"is_zero_fill_wiped": False, "zero_fill_proportion": 0.0, "file_path": file_path}
+
+    for chunk in read_file_content(file_path, mode='rb', chunk_size=chunk_size):
+        total_chunks += 1
+        if all(byte == 0 for byte in chunk):
+            zero_filled_chunks += 1
+
+    zero_fill_proportion = zero_filled_chunks / total_chunks if total_chunks > 0 else 0.0
+    is_zero_fill_wiped = zero_fill_proportion >= threshold
 
     return {
         "file_path": file_path,
-        "wiping_patterns_found": bool(found_patterns),
-        "detected_patterns": found_patterns
+        "is_zero_fill_wiped": is_zero_fill_wiped,
+        "zero_fill_proportion": round(zero_fill_proportion, 4)
     }
 
-def analyze_slack_space(file_path):
+def detect_pattern_fill(file_path, pattern=b'\xff', chunk_size=4096, threshold=0.9):
     """
-    Placeholder for analyzing file slack space for data wiping remnants.
-    This is a complex operation that typically requires raw disk access or
-    specialized forensic tools, and cannot be done directly on a file path
-    in a standard Python environment.
-    
+    Detects if a significant portion of a file is filled with a specific byte pattern.
+    Common patterns include 0xFF (all ones) or other specific sequences.
+
     Args:
-        file_path (str): The path to the file whose slack space is to be analyzed.
-        
+        file_path (str): The path to the file to analyze.
+        pattern (bytes): The byte pattern to look for (e.g., b'\xff' for all ones).
+        chunk_size (int): The size of chunks to read from the file.
+        threshold (float): The proportion of pattern-filled chunks to consider it wiped.
+
     Returns:
-        dict: A dictionary indicating that slack space analysis is not directly supported
-              or requires specialized tools.
+        dict: A dictionary indicating if pattern-fill wiping is suspected and the proportion.
     """
+    if not os.path.exists(file_path):
+        return {"error": "File not found", "file_path": file_path}
+
+    total_chunks = 0
+    pattern_filled_chunks = 0
+    file_size = get_file_size(file_path)
+
+    if file_size == 0:
+        return {"is_pattern_fill_wiped": False, "pattern_fill_proportion": 0.0, "file_path": file_path}
+
+    for chunk in read_file_content(file_path, mode='rb', chunk_size=chunk_size):
+        total_chunks += 1
+        if all(byte == pattern[0] for byte in chunk):
+            pattern_filled_chunks += 1
+
+    pattern_fill_proportion = pattern_filled_chunks / total_chunks if total_chunks > 0 else 0.0
+    is_pattern_fill_wiped = pattern_fill_proportion >= threshold
+
     return {
         "file_path": file_path,
-        "slack_space_analysis_status": "Not directly supported via file path",
-        "note": "Requires raw disk image access or specialized forensic tools for proper slack space analysis."
+        "is_pattern_fill_wiped": is_pattern_fill_wiped,
+        "pattern_fill_proportion": round(pattern_fill_proportion, 4),
+        "pattern_searched": pattern.hex()
     }
+
+def analyze_slack_space_placeholder(file_path):
+    """
+    Placeholder for analyzing slack space for remnants of wiped data.
+
+    Analyzing slack space typically requires direct disk access and understanding
+    of file system structures (e.g., NTFS, FAT32). This is a complex operation
+    that often needs specialized libraries or kernel-level access.
+
+    Args:
+        file_path (str): The path to the file whose containing cluster's slack space might be analyzed.
+
+    Returns:
+        dict: A dictionary indicating the status of slack space analysis and notes.
+    """
+    if not os.path.exists(file_path):
+        return {"error": "File not found", "file_path": file_path}
+
+    return {
+        "file_path": file_path,
+        "slack_space_analysis_status": "Not Performed",
+        "note": "Slack space analysis is a placeholder. Requires low-level file system access and specialized tools/libraries (e.g., pytsk, libewf) which are beyond the scope of a high-level Python script without elevated privileges."
+    }
+
+def detect_data_wiping_ai(file_path):
+    """
+    Placeholder for AI-based data wiping detection.
+
+    AI-based data wiping detection can involve training models to recognize more subtle
+    and complex patterns left by advanced wiping techniques, or to differentiate between
+    legitimate file content and deliberately overwritten data.
+
+    Model Training Requirements:
+    1.  **Dataset:** A dataset of files that have been subjected to various data wiping
+        techniques (e.g., single pass zero-fill, DoD 5220.22-M, Gutmann method) and
+        corresponding clean files. This would require creating controlled test environments.
+    2.  **Feature Extraction:** Features could include statistical properties of byte sequences
+        (entropy, frequency distribution), presence of specific headers/footers, or anomalies
+        in file system metadata (e.g., unusual allocation patterns).
+    3.  **Model Architecture:** Machine learning models (e.g., SVM, Random Forest) or deep
+        learning models (e.g., CNNs for pattern recognition in raw byte streams) could be used.
+    4.  **Computational Resources:** Training and inference for these models may require
+        significant computational resources.
+
+    Args:
+        file_path (str): The path to the file to analyze.
+
+    Returns:
+        dict: A dictionary indicating the AI detection status and notes on requirements.
+    """
+    if not os.path.exists(file_path):
+        return {"error": "File not found", "file_path": file_path}
+
+    return {
+        "file_path": file_path,
+        "is_ai_wiping_suspected": False, # Placeholder result
+        "confidence": 0.0, # Placeholder confidence
+        "note": "AI-based data wiping detection is a placeholder. Requires a trained machine learning model. See function docstring for model training requirements."
+    }
+
+def detect_data_wiping(file_path):
+    """
+    Detects potential data wiping attempts in a file by combining heuristic
+    checks and a placeholder for AI-based analysis.
+
+    Args:
+        file_path (str): The path to the file to analyze.
+
+    Returns:
+        dict: A dictionary containing the data wiping detection results.
+    """
+    results = {"file_path": file_path}
+
+    zero_fill_result = detect_zero_fill(file_path)
+    results["zero_fill_detection"] = zero_fill_result
+
+    pattern_fill_result = detect_pattern_fill(file_path, pattern=b'\xff')
+    results["all_ones_pattern_detection"] = pattern_fill_result
+
+    # Add other common patterns if needed, e.g., random data (harder to detect heuristically)
+
+    slack_space_result = analyze_slack_space_placeholder(file_path)
+    results["slack_space_analysis"] = slack_space_result
+
+    ai_wiping_result = detect_data_wiping_ai(file_path)
+    results["ai_wiping_detection"] = ai_wiping_result
+
+    is_wiping_suspected = (
+        zero_fill_result.get("is_zero_fill_wiped", False) or
+        pattern_fill_result.get("is_pattern_fill_wiped", False) or
+        ai_wiping_result.get("is_ai_wiping_suspected", False)
+    )
+
+    results["is_data_wiping_suspected"] = is_wiping_suspected
+
+    return results
 
 if __name__ == '__main__':
-    # Example Usage (for testing purposes)
-    # Create a dummy file with some wiping patterns
-    dummy_file_path = "d:\Air University\Semester 5\DF Lab\project\project\backend\python\anti_forensics\dummy_wiped_file.bin"
-    with open(dummy_file_path, 'wb') as f:
-        f.write(b"Some legitimate data here.\n")
-        f.write(b'\x00' * 100) # Null bytes pattern
-        f.write(b"More data.\n")
-        f.write(b'\xFF' * 50)  # 0xFF pattern
-        f.write(b"End of file.\n")
+    # Example Usage
+    # Create a dummy file for testing zero-fill
+    dummy_zero_file = "d:\\Air University\\Semester 5\\DF Lab\\project\\project\\backend\\python\\anti_forensics\\zero_file.bin"
+    with open(dummy_zero_file, 'wb') as f:
+        f.write(b'\x00' * 1024)
+    print(f"Analyzing zero-filled file: {dummy_zero_file}")
+    print(detect_data_wiping(dummy_zero_file))
+    os.remove(dummy_zero_file)
 
-    print(f"Analyzing: {dummy_file_path}")
-    result = detect_data_wiping_patterns(dummy_file_path)
-    print(result)
+    # Create a dummy file for testing pattern-fill (all ones)
+    dummy_ones_file = "d:\\Air University\\Semester 5\\DF Lab\\project\\project\\backend\\python\\anti_forensics\\ones_file.bin"
+    with open(dummy_ones_file, 'wb') as f:
+        f.write(b'\xff' * 1024)
+    print(f"\nAnalyzing all-ones-filled file: {dummy_ones_file}")
+    print(detect_data_wiping(dummy_ones_file))
+    os.remove(dummy_ones_file)
 
-    # Clean up dummy file
-    os.remove(dummy_file_path)
+    # Create a normal file
+    dummy_normal_file = "d:\\Air University\\Semester 5\\DF Lab\\project\\project\\backend\\python\\anti_forensics\\normal_file.txt"
+    with open(dummy_normal_file, 'w') as f:
+        f.write("This is a normal file with some content.")
+    print(f"\nAnalyzing normal file: {dummy_normal_file}")
+    print(detect_data_wiping(dummy_normal_file))
+    os.remove(dummy_normal_file)
 
-    # Example of a clean file
-    clean_file_path = "d:\Air University\Semester 5\DF Lab\project\project\backend\python\anti_forensics\clean_file.txt"
-    with open(clean_file_path, 'w') as f:
-        f.write("This is a clean file with no wiping patterns.")
-    
-    print(f"Analyzing: {clean_file_path}")
-    result_clean = detect_data_wiping_patterns(clean_file_path)
-    print(result_clean)
-    os.remove(clean_file_path)
-
-    print(analyze_slack_space("d:\Air University\Semester 5\DF Lab\project\project\backend\python\anti_forensics\some_file.txt"))
+    # Analyze a non-existent file
+    print(f"\nAnalyzing non-existent file: non_existent.txt")
+    print(detect_data_wiping("d:\\Air University\\Semester 5\\DF Lab\\project\\project\\backend\\python\\anti_forensics\\non_existent.txt"))

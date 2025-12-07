@@ -1,110 +1,124 @@
-import os
+import json
 
-# Import all detection modules
-from anti_forensics.fake_metadata import detect_fake_metadata
-from anti_forensics.hidden_file_finder import find_hidden_files
-from anti_forensics.stego_detector import detect_steganography
-from anti_forensics.timestomp_detector import detect_timestomping
-from anti_forensics.data_wiping_detector import detect_data_wiping_patterns
-from anti_forensics.encryption_detector import detect_encrypted_file
-from anti_forensics.ads_detector import detect_ads
+class AnomalyScorer:
+    def __init__(self):
+        # Define weights or rules for different types of anomalies
+        # These can be adjusted based on forensic expertise or AI model output
+        self.anomaly_weights = {
+            "ads_detection": {"is_ads_present": 0.8},
+            "timestomping_detection": {"is_timestomped": 0.9},
+            "steganography_detection": {"is_stego_suspected": 0.95, "is_ai_stego_suspected": 0.98},
+            "fake_metadata_detection": {"is_fake_metadata": 0.85, "is_ai_fake_metadata_suspected": 0.92},
+            # Add weights for other detectors as they are implemented
+        }
 
-def score_anomalies(file_path):
-    """
-    Aggregates results from various anti-forensics detection modules
-    and assigns an anomaly score to the given file.
-    
-    Args:
-        file_path (str): The path to the file to analyze.
-        
-    Returns:
-        dict: A dictionary containing the total anomaly score and detailed results
-              from each detection module.
-    """
-    total_score = 0
-    detailed_results = {}
+    def _ai_scoring_placeholder(self, analysis_results):
+        """
+        Placeholder for AI-based anomaly scoring.
 
-    if not os.path.exists(file_path):
-        return {"file_path": file_path, "total_anomaly_score": 0, "detailed_results": {"error": "File not found"}}
+        AI-based anomaly scoring can involve training models to learn the subtle indicators
+        and combinations of indicators that suggest malicious anti-forensics activity.
 
-    # Run each detection module and assign scores
+        Model Training Requirements:
+        1.  **Dataset:** A comprehensive dataset of file analysis results, labeled with
+            ground truth regarding the presence and severity of anti-forensics techniques.
+            This dataset would ideally include results from all individual detectors.
+        2.  **Feature Engineering:** Features for the AI model would be the outputs of the
+            individual detectors (e.g., boolean flags, confidence scores from other AI models,
+            number of suspicious reasons, timestamp discrepancies, etc.).
+        3.  **Model Architecture:** Machine learning models like Random Forests, Gradient
+            Boosting Machines, or neural networks could be used to predict an overall
+            anomaly score or a probability of malicious intent.
+        4.  **Computational Resources:** Training and inference for these models may require
+            significant computational resources, especially for deep learning approaches.
 
-    # 1. Fake Metadata Detection
-    fake_metadata_result = detect_fake_metadata(file_path)
-    detailed_results["fake_metadata"] = fake_metadata_result
-    if fake_metadata_result.get("is_fake_metadata"):
-        total_score += 5  # Assign a score for fake metadata
+        Args:
+            analysis_results (dict): The aggregated results from the AntiForensicsAnalyzer.
 
-    # 2. Hidden File Finder (checks if the file itself is hidden or has suspicious naming)
-    # Note: find_hidden_files is designed for directories, so we adapt for a single file
-    # This part might need refinement based on how find_hidden_files is structured.
-    # For now, we'll check if the file name itself indicates hidden status.
-    file_name = os.path.basename(file_path)
-    if file_name.startswith('.') or ('.' not in file_name and file_name != ""):
-        detailed_results["hidden_file_naming"] = {"is_hidden_by_name": True, "reason": "File name starts with '.' or has no extension"}
-        total_score += 3
-    else:
-        detailed_results["hidden_file_naming"] = {"is_hidden_by_name": False}
+        Returns:
+            dict: A dictionary containing AI-based scores or probabilities.
+        """
+        return {
+            "overall_ai_score": 0.0, # Placeholder score
+            "ai_confidence_note": "AI-based scoring is a placeholder. Requires a trained machine learning model. See function docstring for model training requirements."
+        }
 
-    # 3. Steganography Detection
-    stego_result = detect_steganography(file_path)
-    detailed_results["steganography"] = stego_result
-    if stego_result.get("is_steganography_suspected"):
-        total_score += 10 # Steganography is a strong indicator
+    def assign_confidence_score(self, analysis_results):
+        """
+        Assigns a confidence score to the overall anti-forensics analysis results.
 
-    # 4. Timestomp Detection
-    timestomp_result = detect_timestomping(file_path)
-    detailed_results["timestomping"] = timestomp_result
-    if timestomp_result.get("is_timestomped"):
-        total_score += 7 # Timestomping is a significant anomaly
+        Args:
+            analysis_results (dict): The aggregated results from the AntiForensicsAnalyzer.
 
-    # 5. Data Wiping Detection
-    data_wiping_result = detect_data_wiping_patterns(file_path)
-    detailed_results["data_wiping"] = data_wiping_result
-    if data_wiping_result.get("wiping_patterns_found"):
-        total_score += 8 # Data wiping patterns are strong indicators
+        Returns:
+            dict: The analysis results with an added 'confidence_score' and 'anomaly_details'.
+        """
+        total_score = 0.0
+        max_possible_score = 0.0
+        anomaly_details = []
 
-    # 6. Encryption Detection
-    encryption_result = detect_encrypted_file(file_path)
-    detailed_results["encryption"] = encryption_result
-    if encryption_result.get("is_encrypted"):
-        # Encryption itself isn't always malicious, but can be used for anti-forensics
-        total_score += 4 
+        # Heuristic-based scoring
+        for detector_name, weights in self.anomaly_weights.items():
+            if detector_name in analysis_results:
+                detector_result = analysis_results[detector_name]
+                for anomaly_key, weight in weights.items():
+                    if anomaly_key in detector_result and detector_result[anomaly_key]:
+                        total_score += weight
+                        anomaly_details.append(f"{detector_name.replace('_', ' ').title()} suspected (Score: {weight})")
+                    max_possible_score += weight # Sum up all possible weights
 
-    # 7. ADS Detection (Windows-specific)
-    ads_result = detect_ads(file_path)
-    detailed_results["ads"] = ads_result
-    if ads_result.get("detected_ads") and len(ads_result["detected_ads"]) > 0:
-        total_score += 6 # Hidden data in ADS is a strong indicator
+        # Integrate AI-based scoring placeholder
+        ai_scores = self._ai_scoring_placeholder(analysis_results)
+        if ai_scores.get("overall_ai_score", 0) > 0:
+            total_score += ai_scores["overall_ai_score"]
+            anomaly_details.append(f"AI-based overall score: {ai_scores['overall_ai_score']} (Note: {ai_scores['ai_confidence_note']})")
+            max_possible_score += 1.0 # Assuming AI score contributes up to 1.0
+        elif "ai_confidence_note" in ai_scores:
+            anomaly_details.append(f"AI-based scoring note: {ai_scores['ai_confidence_note']}")
 
-    return {
-        "file_path": file_path,
-        "total_anomaly_score": total_score,
-        "detailed_results": detailed_results
-    }
+        # Normalize the score to be between 0 and 1 (or 0 and 100)
+        confidence_score = (total_score / max_possible_score) * 100 if max_possible_score > 0 else 0
+
+        analysis_results["confidence_score"] = round(confidence_score, 2)
+        analysis_results["anomaly_details"] = anomaly_details
+        return analysis_results
 
 if __name__ == '__main__':
-    # Example Usage
-    # Create a dummy file for testing
-    dummy_file_path = "d:\Air University\Semester 5\DF Lab\project\project\backend\python\anti_forensics\anomaly_test_file.txt"
-    with open(dummy_file_path, 'w') as f:
-        f.write("This is a test file for anomaly scoring.")
+    # Example Usage with dummy analysis results
+    scorer = AnomalyScorer()
 
-    print(f"Running anomaly scoring on: {dummy_file_path}")
-    score_output = score_anomalies(dummy_file_path)
-    print(score_output)
+    # Scenario 1: No anomalies
+    no_anomaly_results = {
+        "file_path": "test_file_clean.txt",
+        "ads_detection": {"is_ads_present": False},
+        "timestomping_detection": {"is_timestomped": False},
+        "steganography_detection": {"is_stego_suspected": False, "is_ai_stego_suspected": False},
+        "fake_metadata_detection": {"is_fake_metadata": False, "is_ai_fake_metadata_suspected": False},
+    }
+    scored_no_anomaly = scorer.assign_confidence_score(no_anomaly_results)
+    print("\n--- No Anomaly Scenario ---")
+    print(json.dumps(scored_no_anomaly, indent=4))
 
-    # Clean up dummy file
-    os.remove(dummy_file_path)
+    # Scenario 2: Some anomalies
+    some_anomaly_results = {
+        "file_path": "test_file_suspect.txt",
+        "ads_detection": {"is_ads_present": True, "ads_count": 1},
+        "timestomping_detection": {"is_timestomped": False},
+        "steganography_detection": {"is_stego_suspected": True, "is_ai_stego_suspected": False},
+        "fake_metadata_detection": {"is_fake_metadata": False, "is_ai_fake_metadata_suspected": True},
+    }
+    scored_some_anomaly = scorer.assign_confidence_score(some_anomaly_results)
+    print("\n--- Some Anomaly Scenario ---")
+    print(json.dumps(scored_some_anomaly, indent=4))
 
-    # Example with a file that might trigger some detections (e.g., hidden name)
-    hidden_named_file = "d:\Air University\Semester 5\DF Lab\project\project\backend\python\anti_forensics\.hidden_anomaly_test"
-    with open(hidden_named_file, 'w') as f:
-        f.write("This file has a hidden name.")
-    print(f"\nRunning anomaly scoring on: {hidden_named_file}")
-    score_output_hidden = score_anomalies(hidden_named_file)
-    print(score_output_hidden)
-    os.remove(hidden_named_file)
-
-    # Note: For a comprehensive test, you would need to create files that specifically
-    # trigger each detection mechanism and verify the scores.
+    # Scenario 3: All anomalies (for maximum score)
+    all_anomaly_results = {
+        "file_path": "test_file_highly_suspect.txt",
+        "ads_detection": {"is_ads_present": True, "ads_count": 2},
+        "timestomping_detection": {"is_timestomped": True, "reasons": ["Modification time earlier than creation time"]},
+        "steganography_detection": {"is_stego_suspected": True, "is_ai_stego_suspected": True, "confidence": 0.8},
+        "fake_metadata_detection": {"is_fake_metadata": True, "reasons": ["Future timestamp"], "is_ai_fake_metadata_suspected": True, "confidence": 0.7},
+    }
+    scored_all_anomaly = scorer.assign_confidence_score(all_anomaly_results)
+    print("\n--- All Anomaly Scenario ---")
+    print(json.dumps(scored_all_anomaly, indent=4))
